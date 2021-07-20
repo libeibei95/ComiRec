@@ -261,6 +261,8 @@ class Model_ComiRec_SA(Model):
             interest_emb = tf.matmul(item_att_w, item_list_emb)
 
         self.user_eb = interest_emb
+        self.batch_size = batch_size
+        self.n_interest = num_interest
 
         atten = tf.matmul(self.user_eb, tf.reshape(self.item_eb, [get_shape(item_list_emb)[0], self.dim, 1]))
         atten = tf.nn.softmax(tf.pow(tf.reshape(atten, [get_shape(item_list_emb)[0], num_heads]), 1))
@@ -273,12 +275,12 @@ class Model_ComiRec_SA(Model):
 
     def get_cl_loss(self):
         # self.user_eb: n_user * n_interest * n_dim
-        n_user, n_interest, n_dim = tf.shape(self.user_eb)
         user_emb_norm = (self.user_eb - tf.reduce_mean(self.user_eb, axis=-1)
                          ) / tf.math.reduce_std(self.user_eb, axis=-1)
 
         c = tf.matmul(user_emb_norm, tf.transpose(user_emb_norm, perm=[0, 2, 1]))  # n_user * n_interest * n_interest
-        c = c - tf.reshape(tf.tile(tf.eye(self.n_interest), [n_user, 1]), [n_user, n_interest, n_interest])
+        c = c - tf.reshape(tf.tile(tf.eye(self.n_interest), [self.batch_size, 1]),
+                           [self.batch_size, self.n_interest, self.n_interest])
         return tf.reduce_mean(tf.reshape(c, [-1])) * self.coef
 
     def build_sampled_softmax_loss(self, item_emb, user_emb):
