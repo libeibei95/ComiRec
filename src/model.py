@@ -275,8 +275,9 @@ class Model_ComiRec_SA(Model):
 
     def get_cl_loss(self):
         # self.user_eb: n_user * n_interest * n_dim
-        user_emb_norm = (self.user_eb - tf.reduce_mean(self.user_eb, axis=-1)
-                         ) / tf.math.reduce_std(self.user_eb, axis=-1)
+        m, v = tf.nn.moments(self.user_eb, axes = -1)
+
+        user_emb_norm = (self.user_eb - tf.reshape(m, [self.batch_size, self.n_interest, 1])) / tf.reshape(v, [self.batch_size, self.n_interest, 1])
 
         c = tf.matmul(user_emb_norm, tf.transpose(user_emb_norm, perm=[0, 2, 1]))  # n_user * n_interest * n_interest
         c = c - tf.reshape(tf.tile(tf.eye(self.n_interest), [self.batch_size, 1]),
