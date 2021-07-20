@@ -12,6 +12,7 @@ class Model(object):
         self.batch_size = batch_size
         self.n_mid = n_mid
         self.neg_num = 10
+        self.n_dim = embedding_dim
         with tf.name_scope('Inputs'):
             self.mid_his_batch_ph = tf.placeholder(tf.int32, [None, None], name='mid_his_batch_ph')
             self.uid_batch_ph = tf.placeholder(tf.int32, [None, ], name='uid_batch_ph')
@@ -275,19 +276,24 @@ class Model_ComiRec_SA(Model):
 
     def get_cl_loss(self):
         # self.user_eb: n_user * n_interest * n_dim
-        m, v = tf.nn.moments(self.user_eb, axes = -1)
+        m, v = tf.nn.moments(self.user_eb, axes=-1)
+        user_emb_norm = (self.user_eb - tf.reshape(m, [self.batch_size, self.n_interest, 1])) / tf.reshape(
+            tf.sqrt(v + 0.000000001), [self.batch_size, self.n_interest, 1])
 
-        user_emb_norm = (self.user_eb - tf.reshape(m, [self.batch_size, self.n_interest, 1])) / tf.reshape(v, [self.batch_size, self.n_interest, 1])
+        c = tf.matmul(user_emb_norm,
+                      tf.transpose(user_emb_norm, perm=[0, 2, 1])) / self.n_dim  # n_user * n_interest * n_interest
+        on_diag = tf.matrix_diag_part(c) + (-1)
+        on_diag = tf.reduce_sum(tf.pow(on_diag, 2))
 
-        c = tf.matmul(user_emb_norm, tf.transpose(user_emb_norm, perm=[0, 2, 1]))  # n_user * n_interest * n_interest
-        c = c - tf.reshape(tf.tile(tf.eye(self.n_interest), [self.batch_size, 1]),
-                           [self.batch_size, self.n_interest, self.n_interest])
-        return tf.reduce_mean(tf.reshape(c, [-1])) * self.coef
+        flattened = tf.reshape(c, [self.batch_size, -1])[:, :-1]
+        off_diag = tf.reshape(flattened, (self.batch_size, self.n_interest - 1, self.n_interest + 1))[:, :, 1:]
+        off_diag = tf.reshape(off_diag, (self.batch_size, self.n_interest, self.n_interest - 1))
+        off_diag = tf.reduce_sum(tf.pow(off_diag, 2)) * self.coef
+        return (on_diag + off_diag) / (self.batch_size * self.n_interest * self.n_interest)
 
     def build_sampled_softmax_loss(self, item_emb, user_emb):
         self.loss = tf.reduce_mean(tf.nn.sampled_softmax_loss(self.mid_embeddings_var, self.mid_embeddings_bias,
                                                               tf.reshape(self.mid_batch_ph, [-1, 1]), user_emb,
                                                               self.neg_num * self.batch_size, self.n_mid))
         self.loss = self.loss + self.get_cl_loss()
-
         self.optimizer = tf.train.AdamOptimizer(learning_rate=self.lr).minimize(self.loss)
