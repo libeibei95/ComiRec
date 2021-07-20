@@ -82,6 +82,7 @@ def evaluate_full(sess, test_data, model, model_path, batch_size, item_cate_map,
 
         user_embs = model.output_user(sess, [hist_item, hist_mask])
 
+        # todo: ndcg 的计算好像有问题
         if len(user_embs.shape) == 2:
             D, I = gpu_index.search(user_embs, topN)
             for i, iid_list in enumerate(item_id):

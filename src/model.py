@@ -25,16 +25,18 @@ class Model(object):
         # Embedding layer
         with tf.name_scope('Embedding_layer'):
             self.mid_embeddings_var = tf.get_variable("mid_embedding_var", [n_mid, embedding_dim], trainable=True)
-            self.mid_embeddings_bias = tf.get_variable("bias_lookup_table", [n_mid], initializer=tf.zeros_initializer(), trainable=False)
+            self.mid_embeddings_bias = tf.get_variable("bias_lookup_table", [n_mid], initializer=tf.zeros_initializer(),
+                                                       trainable=False)
             self.mid_batch_embedded = tf.nn.embedding_lookup(self.mid_embeddings_var, self.mid_batch_ph)
             self.mid_his_batch_embedded = tf.nn.embedding_lookup(self.mid_embeddings_var, self.mid_his_batch_ph)
 
         self.item_eb = self.mid_batch_embedded
         self.item_his_eb = self.mid_his_batch_embedded * tf.reshape(self.mask, (-1, seq_len, 1))
 
-
     def build_sampled_softmax_loss(self, item_emb, user_emb):
-        self.loss = tf.reduce_mean(tf.nn.sampled_softmax_loss(self.mid_embeddings_var, self.mid_embeddings_bias, tf.reshape(self.mid_batch_ph, [-1, 1]), user_emb, self.neg_num * self.batch_size, self.n_mid))
+        self.loss = tf.reduce_mean(tf.nn.sampled_softmax_loss(self.mid_embeddings_var, self.mid_embeddings_bias,
+                                                              tf.reshape(self.mid_batch_ph, [-1, 1]), user_emb,
+                                                              self.neg_num * self.batch_size, self.n_mid))
 
         self.optimizer = tf.train.AdamOptimizer(learning_rate=self.lr).minimize(self.loss)
 
@@ -59,7 +61,7 @@ class Model(object):
             self.mask: inps[1]
         })
         return user_embs
-    
+
     def save(self, sess, path):
         if not os.path.exists(path):
             os.makedirs(path)
@@ -71,26 +73,29 @@ class Model(object):
         saver.restore(sess, path + 'model.ckpt')
         print('model restored from %s' % path)
 
+
 class Model_DNN(Model):
     def __init__(self, n_mid, embedding_dim, hidden_size, batch_size, seq_len=256):
         super(Model_DNN, self).__init__(n_mid, embedding_dim, hidden_size,
-                                           batch_size, seq_len, flag="DNN")
+                                        batch_size, seq_len, flag="DNN")
 
         masks = tf.concat([tf.expand_dims(self.mask, -1) for _ in range(embedding_dim)], axis=-1)
 
-        self.item_his_eb_mean = tf.reduce_sum(self.item_his_eb, 1) / (tf.reduce_sum(tf.cast(masks, dtype=tf.float32), 1) + 1e-9)
+        self.item_his_eb_mean = tf.reduce_sum(self.item_his_eb, 1) / (
+                tf.reduce_sum(tf.cast(masks, dtype=tf.float32), 1) + 1e-9)
         self.user_eb = tf.layers.dense(self.item_his_eb_mean, hidden_size, activation=None)
         self.build_sampled_softmax_loss(self.item_eb, self.user_eb)
+
 
 class Model_GRU4REC(Model):
     def __init__(self, n_mid, embedding_dim, hidden_size, batch_size, seq_len=256):
         super(Model_GRU4REC, self).__init__(n_mid, embedding_dim, hidden_size,
-                                           batch_size, seq_len, flag="GRU4REC")
+                                            batch_size, seq_len, flag="GRU4REC")
         with tf.name_scope('rnn_1'):
             self.sequence_length = self.mask_length
             rnn_outputs, final_state1 = tf.nn.dynamic_rnn(GRUCell(hidden_size), inputs=self.item_his_eb,
-                                         sequence_length=self.sequence_length, dtype=tf.float32,
-                                         scope="gru1")
+                                                          sequence_length=self.sequence_length, dtype=tf.float32,
+                                                          scope="gru1")
 
         self.user_eb = final_state1
         self.build_sampled_softmax_loss(self.item_eb, self.user_eb)
@@ -104,6 +109,7 @@ def get_shape(inputs):
         shape.append(dim if dim is not None else dynamic_shape[i])
 
     return shape
+
 
 class CapsuleNetwork(tf.layers.Layer):
     def __init__(self, dim, seq_len, bilinear_type=2, num_interest=4, hard_readout=True, relu_layer=False):
@@ -122,7 +128,8 @@ class CapsuleNetwork(tf.layers.Layer):
                 item_emb_hat = tf.layers.dense(item_his_emb, self.dim, activation=None, bias_initializer=None)
                 item_emb_hat = tf.tile(item_emb_hat, [1, 1, self.num_interest])
             elif self.bilinear_type == 1:
-                item_emb_hat = tf.layers.dense(item_his_emb, self.dim * self.num_interest, activation=None, bias_initializer=None)
+                item_emb_hat = tf.layers.dense(item_his_emb, self.dim * self.num_interest, activation=None,
+                                               bias_initializer=None)
             else:
                 w = tf.get_variable(
                     'weights', shape=[1, self.seq_len, self.num_interest * self.dim, self.dim],
@@ -144,7 +151,8 @@ class CapsuleNetwork(tf.layers.Layer):
         if self.bilinear_type > 0:
             capsule_weight = tf.stop_gradient(tf.zeros([get_shape(item_his_emb)[0], self.num_interest, self.seq_len]))
         else:
-            capsule_weight = tf.stop_gradient(tf.truncated_normal([get_shape(item_his_emb)[0], self.num_interest, self.seq_len], stddev=1.0))
+            capsule_weight = tf.stop_gradient(
+                tf.truncated_normal([get_shape(item_his_emb)[0], self.num_interest, self.seq_len], stddev=1.0))
 
         for i in range(3):
             atten_mask = tf.tile(tf.expand_dims(mask, axis=1), [1, self.num_interest, 1])
@@ -178,41 +186,53 @@ class CapsuleNetwork(tf.layers.Layer):
         atten = tf.nn.softmax(tf.pow(tf.reshape(atten, [-1, self.num_interest]), 1))
 
         if self.hard_readout:
-            readout = tf.gather(tf.reshape(interest_capsule, [-1, self.dim]), tf.argmax(atten, axis=1, output_type=tf.int32) + tf.range(tf.shape(item_his_emb)[0]) * self.num_interest)
+            readout = tf.gather(tf.reshape(interest_capsule, [-1, self.dim]),
+                                tf.argmax(atten, axis=1, output_type=tf.int32) + tf.range(
+                                    tf.shape(item_his_emb)[0]) * self.num_interest)
         else:
             readout = tf.matmul(tf.reshape(atten, [get_shape(item_his_emb)[0], 1, self.num_interest]), interest_capsule)
             readout = tf.reshape(readout, [get_shape(item_his_emb)[0], self.dim])
 
         return interest_capsule, readout
 
+
 class Model_MIND(Model):
-    def __init__(self, n_mid, embedding_dim, hidden_size, batch_size, num_interest, seq_len=256, hard_readout=True, relu_layer=True):
+    def __init__(self, n_mid, embedding_dim, hidden_size, batch_size, num_interest, seq_len=256, hard_readout=True,
+                 relu_layer=True):
         super(Model_MIND, self).__init__(n_mid, embedding_dim, hidden_size, batch_size, seq_len, flag="MIND")
 
         item_his_emb = self.item_his_eb
 
-        capsule_network = CapsuleNetwork(hidden_size, seq_len, bilinear_type=0, num_interest=num_interest, hard_readout=hard_readout, relu_layer=relu_layer)
+        capsule_network = CapsuleNetwork(hidden_size, seq_len, bilinear_type=0, num_interest=num_interest,
+                                         hard_readout=hard_readout, relu_layer=relu_layer)
         self.user_eb, self.readout = capsule_network(item_his_emb, self.item_eb, self.mask)
 
         self.build_sampled_softmax_loss(self.item_eb, self.readout)
 
+
 class Model_ComiRec_DR(Model):
-    def __init__(self, n_mid, embedding_dim, hidden_size, batch_size, num_interest, seq_len=256, hard_readout=True, relu_layer=False):
-        super(Model_ComiRec_DR, self).__init__(n_mid, embedding_dim, hidden_size, batch_size, seq_len, flag="ComiRec_DR")
+    def __init__(self, n_mid, embedding_dim, hidden_size, batch_size, num_interest, seq_len=256, hard_readout=True,
+                 relu_layer=False):
+        super(Model_ComiRec_DR, self).__init__(n_mid, embedding_dim, hidden_size, batch_size, seq_len,
+                                               flag="ComiRec_DR")
 
         item_his_emb = self.item_his_eb
 
-        capsule_network = CapsuleNetwork(hidden_size, seq_len, bilinear_type=2, num_interest=num_interest, hard_readout=hard_readout, relu_layer=relu_layer)
+        capsule_network = CapsuleNetwork(hidden_size, seq_len, bilinear_type=2, num_interest=num_interest,
+                                         hard_readout=hard_readout, relu_layer=relu_layer)
         self.user_eb, self.readout = capsule_network(item_his_emb, self.item_eb, self.mask)
 
         self.build_sampled_softmax_loss(self.item_eb, self.readout)
 
+
 class Model_ComiRec_SA(Model):
-    def __init__(self, n_mid, embedding_dim, hidden_size, batch_size, num_interest, seq_len=256, add_pos=True):
+    def __init__(self, n_mid, embedding_dim, hidden_size, batch_size, num_interest, seq_len=256, add_pos=True, coef=2):
         super(Model_ComiRec_SA, self).__init__(n_mid, embedding_dim, hidden_size,
-                                                   batch_size, seq_len, flag="ComiRec_SA")
-        
+                                               batch_size, seq_len, flag="ComiRec_SA")
+
         self.dim = embedding_dim
+        self.coef = coef
+
         item_list_emb = tf.reshape(self.item_his_eb, [-1, seq_len, embedding_dim])
 
         if add_pos:
@@ -225,10 +245,12 @@ class Model_ComiRec_SA(Model):
             item_list_add_pos = item_list_emb
 
         num_heads = num_interest
+        self.n_interest = num_interest
+
         with tf.variable_scope("self_atten", reuse=tf.AUTO_REUSE) as scope:
             item_hidden = tf.layers.dense(item_list_add_pos, hidden_size * 4, activation=tf.nn.tanh)
-            item_att_w  = tf.layers.dense(item_hidden, num_heads, activation=None)
-            item_att_w  = tf.transpose(item_att_w, [0, 2, 1])
+            item_att_w = tf.layers.dense(item_hidden, num_heads, activation=None)
+            item_att_w = tf.transpose(item_att_w, [0, 2, 1])
 
             atten_mask = tf.tile(tf.expand_dims(self.mask, axis=1), [1, num_heads, 1])
             paddings = tf.ones_like(atten_mask) * (-2 ** 32 + 1)
@@ -243,6 +265,26 @@ class Model_ComiRec_SA(Model):
         atten = tf.matmul(self.user_eb, tf.reshape(self.item_eb, [get_shape(item_list_emb)[0], self.dim, 1]))
         atten = tf.nn.softmax(tf.pow(tf.reshape(atten, [get_shape(item_list_emb)[0], num_heads]), 1))
 
-        readout = tf.gather(tf.reshape(self.user_eb, [-1, self.dim]), tf.argmax(atten, axis=1, output_type=tf.int32) + tf.range(tf.shape(item_list_emb)[0]) * num_heads)
+        readout = tf.gather(tf.reshape(self.user_eb, [-1, self.dim]),
+                            tf.argmax(atten, axis=1, output_type=tf.int32) + tf.range(
+                                tf.shape(item_list_emb)[0]) * num_heads)
 
         self.build_sampled_softmax_loss(self.item_eb, readout)
+
+    def get_cl_loss(self):
+        # self.user_eb: n_user * n_interest * n_dim
+        n_user, n_interest, n_dim = tf.shape(self.user_eb)
+        user_emb_norm = (self.user_eb - tf.reduce_mean(self.user_eb, axis=-1)
+                         ) / tf.math.reduce_std(self.user_eb, axis=-1)
+
+        c = tf.matmul(user_emb_norm, tf.transpose(user_emb_norm, perm=[0, 2, 1]))  # n_user * n_interest * n_interest
+        c = c - tf.reshape(tf.tile(tf.eye(self.n_interest), [n_user, 1]), [n_user, n_interest, n_interest])
+        return tf.reduce_mean(tf.reshape(c, [-1])) * self.coef
+
+    def build_sampled_softmax_loss(self, item_emb, user_emb):
+        self.loss = tf.reduce_mean(tf.nn.sampled_softmax_loss(self.mid_embeddings_var, self.mid_embeddings_bias,
+                                                              tf.reshape(self.mid_batch_ph, [-1, 1]), user_emb,
+                                                              self.neg_num * self.batch_size, self.n_mid))
+        self.loss = self.loss + self.get_cl_loss()
+
+        self.optimizer = tf.train.AdamOptimizer(learning_rate=self.lr).minimize(self.loss)
