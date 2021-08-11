@@ -276,10 +276,11 @@ class Model_ComiRec_SA(Model):
 
     def get_cl_loss(self):
         # self.user_eb: n_user * n_interest * n_dim
-        m, v = tf.nn.moments(self.user_eb, axes=-1)
-        user_emb_norm = (self.user_eb - tf.reshape(m, [self.batch_size, self.n_interest, 1])) / tf.reshape(
-            tf.sqrt(v + 0.000000001), [self.batch_size, self.n_interest, 1])
-
+        #m, v = tf.nn.moments(self.user_eb, axes=-1)
+        #user_emb_norm = (self.user_eb - tf.reshape(m, [self.batch_size, self.n_interest, 1])) / tf.reshape(
+        #    tf.sqrt(v + 0.000000001), [self.batch_size, self.n_interest, 1])
+        
+        user_emb_norm = self.user_eb
         c = tf.matmul(user_emb_norm,
                       tf.transpose(user_emb_norm, perm=[0, 2, 1])) / self.n_dim  # n_user * n_interest * n_interest
         on_diag = tf.matrix_diag_part(c) + (-1)
@@ -295,5 +296,5 @@ class Model_ComiRec_SA(Model):
         self.loss = tf.reduce_mean(tf.nn.sampled_softmax_loss(self.mid_embeddings_var, self.mid_embeddings_bias,
                                                               tf.reshape(self.mid_batch_ph, [-1, 1]), user_emb,
                                                               self.neg_num * self.batch_size, self.n_mid))
-        self.loss = self.loss + self.get_cl_loss()
+        #self.loss = self.loss + self.get_cl_loss()
         self.optimizer = tf.train.AdamOptimizer(learning_rate=self.lr).minimize(self.loss)

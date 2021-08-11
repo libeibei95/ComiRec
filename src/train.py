@@ -58,13 +58,11 @@ def compute_diversity(item_list, item_cate_map):
 
 def evaluate_full(sess, test_data, model, model_path, batch_size, item_cate_map, save=True, coef=None):
     topN = args.topN
-
     item_embs = model.output_item(sess)
-
     res = faiss.StandardGpuResources()
     flat_config = faiss.GpuIndexFlatConfig()
     flat_config.device = 0
-
+    
     try:
         gpu_index = faiss.GpuIndexFlatIP(res, args.embedding_dim, flat_config)
         gpu_index.add(item_embs)
@@ -77,7 +75,9 @@ def evaluate_full(sess, test_data, model, model_path, batch_size, item_cate_map,
     total_hitrate = 0
     total_map = 0.0
     total_diversity = 0.0
+    cnt=7
     for src, tgt in test_data:
+        cnt = cnt + 1
         nick_id, item_id, hist_item, hist_mask = prepare_data(src, tgt)
 
         user_embs = model.output_user(sess, [hist_item, hist_mask])
@@ -246,10 +246,12 @@ def train(
                 data_iter = prepare_data(src, tgt)
                 loss = model.train(sess, list(data_iter) + [lr])
                 
+
                 loss_sum += loss
                 iter += 1
 
                 if iter % test_iter == 0:
+                    begin_test_time = time.time()
                     metrics = evaluate_full(sess, valid_data, model, best_model_path, batch_size, item_cate_map)
                     log_str = 'iter: %d, train loss: %.4f' % (iter, loss_sum / test_iter)
                     if metrics != {}:
@@ -276,6 +278,7 @@ def train(
 
                     loss_sum = 0.0
                     test_time = time.time()
+                    print("test time: %.4f min" % ((test_time-begin_test_time)/60.0))
                     print("time interval: %.4f min" % ((test_time-start_time)/60.0))
                     sys.stdout.flush()
                 
@@ -357,7 +360,7 @@ if __name__ == '__main__':
     elif args.dataset == 'book':
         path = './data/book_data/'
         item_count = 367983
-        batch_size = 128
+        batch_size = 1024
         maxlen = 20
         test_iter = 1000
     
