@@ -77,3 +77,4 @@ class DataIterator:
                 hist_mask_list.append([1.0] * k + [0.0] * (self.maxlen - k))
                 
         return (user_id_list, item_id_list), (hist_item_list, hist_mask_list)
+

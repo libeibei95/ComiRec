@@ -292,9 +292,21 @@ class Model_ComiRec_SA(Model):
         off_diag = tf.reduce_sum(tf.pow(off_diag, 2)) * self.coef
         return (on_diag + off_diag) / (self.batch_size * self.n_interest * self.n_interest)
 
+    def train(self, sess, inps):
+        feed_dict = {
+            self.uid_batch_ph: inps[0],
+            self.mid_batch_ph: inps[1],
+            self.mid_his_batch_ph: inps[2],
+            self.mask: inps[3],
+            self.lr: inps[4]
+        }
+        loss, loss_raw, _ = sess.run([self.loss, self.loss_raw, self.optimizer], feed_dict=feed_dict)
+        print(loss_raw)
+        return loss
     def build_sampled_softmax_loss(self, item_emb, user_emb):
-        self.loss = tf.reduce_mean(tf.nn.sampled_softmax_loss(self.mid_embeddings_var, self.mid_embeddings_bias,
+        self.loss_raw = tf.nn.sampled_softmax_loss(self.mid_embeddings_var, self.mid_embeddings_bias,
                                                               tf.reshape(self.mid_batch_ph, [-1, 1]), user_emb,
-                                                              self.neg_num * self.batch_size, self.n_mid))
+                                                              self.neg_num * self.batch_size, self.n_mid)
+        self.loss = tf.reduce_mean(self.loss_raw)
         #self.loss = self.loss + self.get_cl_loss()
         self.optimizer = tf.train.AdamOptimizer(learning_rate=self.lr).minimize(self.loss)
