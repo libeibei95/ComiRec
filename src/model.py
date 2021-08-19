@@ -28,6 +28,7 @@ class Model(object):
             self.mid_embeddings_var = tf.get_variable("mid_embedding_var", [n_mid, embedding_dim], trainable=True)
             self.mid_embeddings_bias = tf.get_variable("bias_lookup_table", [n_mid], initializer=tf.zeros_initializer(),
                                                        trainable=False)
+            tf.summary.histogram('item_embedding', self.mid_embeddings_var)
             self.mid_batch_embedded = tf.nn.embedding_lookup(self.mid_embeddings_var, self.mid_batch_ph)
             self.mid_his_batch_embedded = tf.nn.embedding_lookup(self.mid_embeddings_var, self.mid_his_batch_ph)
 
@@ -39,7 +40,7 @@ class Model(object):
                                                               tf.reshape(self.mid_batch_ph, [-1, 1]), user_emb,
                                                               self.neg_num * self.batch_size, self.n_mid))
 
-        self.optimizer = tf.train.AdamOptimizer(learning_rate=self.lr).minimize(self.loss)
+        self.optimizer = self.tf.train.AdamOptimizer(learning_rate=self.lr).minimize(self.loss)
 
     def train(self, sess, inps):
         feed_dict = {
@@ -227,7 +228,7 @@ class Model_ComiRec_DR(Model):
 
 
 class Model_ComiRec_SA(Model):
-    def __init__(self, n_mid, embedding_dim, hidden_size, batch_size, num_interest, seq_len=256, add_pos=True, coef=2):
+    def __init__(self, n_mid, embedding_dim, hidden_size, batch_size, num_interest, seq_len=256, add_pos=False, coef=2):
         super(Model_ComiRec_SA, self).__init__(n_mid, embedding_dim, hidden_size,
                                                batch_size, seq_len, flag="ComiRec_SA")
 
@@ -253,6 +254,9 @@ class Model_ComiRec_SA(Model):
             item_att_w = tf.layers.dense(item_hidden, num_heads, activation=None)
             item_att_w = tf.transpose(item_att_w, [0, 2, 1])
 
+            tf.summary.histogram('item_hidden', item_hidden)
+            tf.summary.histogram('item_att_w', item_att_w)
+
             atten_mask = tf.tile(tf.expand_dims(self.mask, axis=1), [1, num_heads, 1])
             paddings = tf.ones_like(atten_mask) * (-2 ** 32 + 1)
 
@@ -275,7 +279,7 @@ class Model_ComiRec_SA(Model):
         self.build_sampled_softmax_loss(self.item_eb, readout)
 
     def get_cl_loss(self):
-        # self.user_eb: n_user * n_interest * n_dim
+        #self.user_eb: n_user * n_interest * n_dim
         #m, v = tf.nn.moments(self.user_eb, axes=-1)
         #user_emb_norm = (self.user_eb - tf.reshape(m, [self.batch_size, self.n_interest, 1])) / tf.reshape(
         #    tf.sqrt(v + 0.000000001), [self.batch_size, self.n_interest, 1])
@@ -309,4 +313,22 @@ class Model_ComiRec_SA(Model):
                                                               self.neg_num * self.batch_size, self.n_mid)
         self.loss = tf.reduce_mean(self.loss_raw)
         #self.loss = self.loss + self.get_cl_loss()
-        self.optimizer = tf.train.AdamOptimizer(learning_rate=self.lr).minimize(self.loss)
+        self.opt = tf.train.AdamOptimizer(learning_rate=self.lr)
+        grads = tf.gradients(self.loss, tf.trainable_variables())
+        for grad, var in zip(grads, tf.trainable_variables()):
+            tf.summary.histogram(var.name+'_grad', grad)
+            tf.summary.histogram(var.name, var.read_value())
+
+        self.merge_ops = tf.summary.merge_all()
+        self.optimizer = self.opt.minimize(self.loss)
+
+    def get_summary(self, sess, inps):
+        feed_dict = {
+            self.uid_batch_ph: inps[0],
+            self.mid_batch_ph: inps[1],
+            self.mid_his_batch_ph: inps[2],
+            self.mask: inps[3],
+            self.lr: inps[4]
+        }
+        summary = sess.run([self.merge_ops], feed_dict=feed_dict)
+        return summary

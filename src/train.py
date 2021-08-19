@@ -252,6 +252,8 @@ def train(
 
                 if iter % test_iter == 0:
                     begin_test_time = time.time()
+                    summary = model.get_summary(sess, list(data_iter)+[lr])
+                    writer.add_summary(summary, iter)
                     metrics = evaluate_full(sess, valid_data, model, best_model_path, batch_size, item_cate_map)
                     log_str = 'iter: %d, train loss: %.4f' % (iter, loss_sum / test_iter)
                     if metrics != {}:
@@ -263,7 +265,13 @@ def train(
                     if metrics != {}:
                         for key, value in metrics.items():
                             writer.add_scalar('eval/' + key, value, iter)
-                    
+
+
+                    gradient_w = model.opt.compute_gradients(loss, var_list=tf.trainable_variables())
+                    for idx, itr_g, var in enumerate(zip(gradient_w, tf.trainable_variables())):
+                        writer.add_histogram(var.name, itr_g, iter)
+
+
                     if 'recall' in metrics:
                         recall = metrics['recall']
                         global best_metric
@@ -362,7 +370,7 @@ if __name__ == '__main__':
         item_count = 367983
         batch_size = 1024
         maxlen = 20
-        test_iter = 1000
+        test_iter = 100
     
     train_file = path + args.dataset + '_train.txt'
     valid_file = path + args.dataset + '_valid.txt'
