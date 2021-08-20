@@ -305,7 +305,7 @@ class Model_ComiRec_SA(Model):
             self.lr: inps[4]
         }
         loss, loss_raw, _ = sess.run([self.loss, self.loss_raw, self.optimizer], feed_dict=feed_dict)
-        print(loss_raw)
+        # print(loss_raw)
         return loss
     def build_sampled_softmax_loss(self, item_emb, user_emb):
         self.loss_raw = tf.nn.sampled_softmax_loss(self.mid_embeddings_var, self.mid_embeddings_bias,

@@ -261,10 +261,15 @@ def train(
                     print(exp_name)
                     print(log_str)
 
-                    tf.summary.scalar('train/loss', loss_sum / test_iter, iter)
+                    tmp = tf.Variable(loss_sum / test_iter, dtype=tf.float32)
+                    loss_summ = tf.summary.scalar('train/loss', tmp)
+                    writer.add_summary(sess.run(loss_summ), iter)
+
                     if metrics != {}:
                         for key, value in metrics.items():
-                            tf.summary.scalar('eval/' + key, value, iter)
+                            sess.run(tmp.assign(value))
+                            met_summ = tf.summary.scalar('eval/' + key, tmp)
+                            writer.add_summary(sess.run(met_summ), iter)
 
 
                     if 'recall' in metrics:
