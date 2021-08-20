@@ -14,7 +14,7 @@ import faiss
 import tensorflow as tf
 from data_iterator import DataIterator
 from model import *
-from tensorboardX import SummaryWriter
+# from tensorboardX import SummaryWriter
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-p', type=str, default='train', help='train | test')
@@ -220,8 +220,6 @@ def train(
 
     gpu_options = tf.GPUOptions(allow_growth=True)
 
-    writer = SummaryWriter('runs/' + exp_name)
-
     item_cate_map = load_item_cate(cate_file)
 
     with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
@@ -229,7 +227,9 @@ def train(
         valid_data = DataIterator(valid_file, batch_size, maxlen, train_flag=1)
         
         model = get_model(dataset, model_type, item_count, batch_size, maxlen)
-        
+
+        writer = tf.summary.FileWriter('runs/' + exp_name, graph=tf.get_default_graph())
+
         sess.run(tf.global_variables_initializer())
         sess.run(tf.local_variables_initializer())
 
@@ -261,15 +261,10 @@ def train(
                     print(exp_name)
                     print(log_str)
 
-                    writer.add_scalar('train/loss', loss_sum / test_iter, iter)
+                    tf.summary.scalar('train/loss', loss_sum / test_iter, iter)
                     if metrics != {}:
                         for key, value in metrics.items():
-                            writer.add_scalar('eval/' + key, value, iter)
-
-
-                    gradient_w = model.opt.compute_gradients(loss, var_list=tf.trainable_variables())
-                    for idx, itr_g, var in enumerate(zip(gradient_w, tf.trainable_variables())):
-                        writer.add_histogram(var.name, itr_g, iter)
+                            tf.summary.scalar('eval/' + key, value, iter)
 
 
                     if 'recall' in metrics:

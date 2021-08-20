@@ -254,9 +254,6 @@ class Model_ComiRec_SA(Model):
             item_att_w = tf.layers.dense(item_hidden, num_heads, activation=None)
             item_att_w = tf.transpose(item_att_w, [0, 2, 1])
 
-            tf.summary.histogram('item_hidden', item_hidden)
-            tf.summary.histogram('item_att_w', item_att_w)
-
             atten_mask = tf.tile(tf.expand_dims(self.mask, axis=1), [1, num_heads, 1])
             paddings = tf.ones_like(atten_mask) * (-2 ** 32 + 1)
 
@@ -264,6 +261,9 @@ class Model_ComiRec_SA(Model):
             item_att_w = tf.nn.softmax(item_att_w)
 
             interest_emb = tf.matmul(item_att_w, item_list_emb)
+
+            tf.summary.histogram('item_att_w', item_att_w)
+            tf.summary.histogram('interest_emb', interest_emb)
 
         self.user_eb = interest_emb
         self.batch_size = batch_size
@@ -314,8 +314,10 @@ class Model_ComiRec_SA(Model):
         self.loss = tf.reduce_mean(self.loss_raw)
         #self.loss = self.loss + self.get_cl_loss()
         self.opt = tf.train.AdamOptimizer(learning_rate=self.lr)
-        grads = tf.gradients(self.loss, tf.trainable_variables())
-        for grad, var in zip(grads, tf.trainable_variables()):
+
+        tf.summary.histogram('loss_raw', self.loss_raw)
+        grads = self.opt.compute_gradients(self.loss, tf.trainable_variables())
+        for grad, var in grads:
             tf.summary.histogram(var.name+'_grad', grad)
             tf.summary.histogram(var.name, var.read_value())
 
@@ -330,5 +332,5 @@ class Model_ComiRec_SA(Model):
             self.mask: inps[3],
             self.lr: inps[4]
         }
-        summary = sess.run([self.merge_ops], feed_dict=feed_dict)
+        summary = sess.run(self.merge_ops, feed_dict=feed_dict)
         return summary
